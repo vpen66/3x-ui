@@ -6,11 +6,13 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"os"
 	"reflect"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/mhsanaei/3x-ui/v2/config"
 	"github.com/mhsanaei/3x-ui/v2/database"
 	"github.com/mhsanaei/3x-ui/v2/database/model"
 	"github.com/mhsanaei/3x-ui/v2/logger"
@@ -33,6 +35,7 @@ var defaultValueMap = map[string]string{
 	"webKeyFile":                  "",
 	"secret":                      random.Seq(32),
 	"webBasePath":                 "/",
+	"lowMemoryMode":               "false",
 	"sessionMaxAge":               "360",
 	"pageSize":                    "25",
 	"expireDiff":                  "0",
@@ -288,6 +291,31 @@ func (s *SettingService) SetXrayOutboundTestUrl(url string) error {
 
 func (s *SettingService) GetListen() (string, error) {
 	return s.getString("webListen")
+}
+
+func (s *SettingService) GetLowMemoryMode() (bool, error) {
+	if config.IsLowMemory() {
+		return true, nil
+	}
+	return s.getBool("lowMemoryMode")
+}
+
+func (s *SettingService) SetLowMemoryMode(value bool) error {
+	return s.setBool("lowMemoryMode", value)
+}
+
+func (s *SettingService) EnsureXrayConfigFile() error {
+	configPath := xray.GetConfigPath()
+	if _, err := os.Stat(configPath); err == nil {
+		return nil
+	} else if !os.IsNotExist(err) {
+		return err
+	}
+
+	if err := os.MkdirAll(config.GetBinFolderPath(), 0o755); err != nil {
+		return err
+	}
+	return os.WriteFile(configPath, []byte(xrayTemplateConfig), 0o644)
 }
 
 func (s *SettingService) SetListen(ip string) error {

@@ -51,6 +51,13 @@ func runWebServer() {
 		log.Fatalf("Error initializing database: %v", err)
 	}
 
+	settingService := service.SettingService{}
+	lowMemoryMode, err := settingService.GetLowMemoryMode()
+	if err != nil {
+		log.Printf("Failed to load low-memory setting, falling back to env only: %v", err)
+		lowMemoryMode = config.IsLowMemory()
+	}
+
 	var server *web.Server
 	server = web.NewServer()
 	global.SetWebServer(server)
@@ -61,12 +68,16 @@ func runWebServer() {
 	}
 
 	var subServer *sub.Server
-	subServer = sub.NewServer()
-	global.SetSubServer(subServer)
-	err = subServer.Start()
-	if err != nil {
-		log.Fatalf("Error starting sub server: %v", err)
-		return
+	if !lowMemoryMode {
+		subServer = sub.NewServer()
+		global.SetSubServer(subServer)
+		err = subServer.Start()
+		if err != nil {
+			log.Fatalf("Error starting sub server: %v", err)
+			return
+		}
+	} else {
+		log.Println("Low-memory mode enabled; skipping sub server startup.")
 	}
 
 	sigCh := make(chan os.Signal, 1)
@@ -87,9 +98,11 @@ func runWebServer() {
 			if err != nil {
 				logger.Debug("Error stopping web server:", err)
 			}
-			err = subServer.Stop()
-			if err != nil {
-				logger.Debug("Error stopping sub server:", err)
+			if subServer != nil {
+				err = subServer.Stop()
+				if err != nil {
+					logger.Debug("Error stopping sub server:", err)
+				}
 			}
 
 			server = web.NewServer()
@@ -101,14 +114,20 @@ func runWebServer() {
 			}
 			log.Println("Web server restarted successfully.")
 
-			subServer = sub.NewServer()
-			global.SetSubServer(subServer)
-			err = subServer.Start()
-			if err != nil {
-				log.Fatalf("Error restarting sub server: %v", err)
-				return
+			if !lowMemoryMode {
+				subServer = sub.NewServer()
+				global.SetSubServer(subServer)
+				err = subServer.Start()
+				if err != nil {
+					log.Fatalf("Error restarting sub server: %v", err)
+					return
+				}
+				log.Println("Sub server restarted successfully.")
+			} else {
+				subServer = nil
+				global.SetSubServer(nil)
+				log.Println("Low-memory mode enabled; skipping sub server restart.")
 			}
-			log.Println("Sub server restarted successfully.")
 		case sys.SIGUSR1:
 			logger.Info("Received USR1 signal, restarting xray-core...")
 			err := server.RestartXray()
@@ -122,7 +141,9 @@ func runWebServer() {
 			// ------------------------------------------------------------
 
 			server.Stop()
-			subServer.Stop()
+			if subServer != nil {
+				subServer.Stop()
+			}
 			log.Println("Shutting down servers.")
 			return
 		}
@@ -168,6 +189,10 @@ func showSetting(show bool) {
 		if err != nil {
 			fmt.Println("get key file failed, error info:", err)
 		}
+		lowMemoryMode, err := settingService.GetLowMemoryMode()
+		if err != nil {
+			fmt.Println("get lowMemoryMode failed, error info:", err)
+		}
 
 		userService := service.UserService{}
 		userModel, err := userService.GetFirstUser()
@@ -193,6 +218,7 @@ func showSetting(show bool) {
 		fmt.Println("hasDefaultCredential:", hasDefaultCredential)
 		fmt.Println("port:", port)
 		fmt.Println("webBasePath:", webBasePath)
+		fmt.Println("lowMemoryMode:", lowMemoryMode)
 	}
 }
 
@@ -255,7 +281,7 @@ func updateTgbotSetting(tgBotToken string, tgBotChatid string, tgBotRuntime stri
 }
 
 // updateSetting updates various panel settings including port, credentials, base path, listen IP, and two-factor authentication.
-func updateSetting(port int, username string, password string, webBasePath string, listenIP string, resetTwoFactor bool) {
+func updateSetting(port int, username string, password string, webBasePath string, listenIP string, resetTwoFactor bool, lowMemoryMode *bool) {
 	err := database.InitDB(config.GetDBPath())
 	if err != nil {
 		fmt.Println("Database initialization failed:", err)
@@ -309,6 +335,15 @@ func updateSetting(port int, username string, password string, webBasePath strin
 			fmt.Println("Failed to set listen IP:", err)
 		} else {
 			fmt.Printf("listen %v set successfully", listenIP)
+		}
+	}
+
+	if lowMemoryMode != nil {
+		err := settingService.SetLowMemoryMode(*lowMemoryMode)
+		if err != nil {
+			fmt.Println("Failed to set low memory mode:", err)
+		} else {
+			fmt.Printf("Low memory mode set successfully: %v\n", *lowMemoryMode)
 		}
 	}
 }
@@ -431,6 +466,8 @@ func main() {
 	var show bool
 	var getCert bool
 	var resetTwoFactor bool
+	var lowMemoryMode bool
+	var lowMemoryModeSet bool
 	settingCmd.BoolVar(&reset, "reset", false, "Reset all settings")
 	settingCmd.BoolVar(&show, "show", false, "Display current settings")
 	settingCmd.IntVar(&port, "port", 0, "Set panel port number")
@@ -443,6 +480,15 @@ func main() {
 	settingCmd.BoolVar(&getCert, "getCert", false, "Display current certificate settings")
 	settingCmd.StringVar(&webCertFile, "webCert", "", "Set path to public key file for panel")
 	settingCmd.StringVar(&webKeyFile, "webCertKey", "", "Set path to private key file for panel")
+	settingCmd.Func("lowMemoryMode", "Enable or disable low memory mode (true/false)", func(value string) error {
+		parsed, err := strconv.ParseBool(value)
+		if err != nil {
+			return err
+		}
+		lowMemoryMode = parsed
+		lowMemoryModeSet = true
+		return nil
+	})
 	settingCmd.StringVar(&tgbottoken, "tgbottoken", "", "Set token for Telegram bot")
 	settingCmd.StringVar(&tgbotRuntime, "tgbotRuntime", "", "Set cron time for Telegram bot notifications")
 	settingCmd.StringVar(&tgbotchatid, "tgbotchatid", "", "Set chat ID for Telegram bot notifications")
@@ -483,7 +529,11 @@ func main() {
 		if reset {
 			resetSetting()
 		} else {
-			updateSetting(port, username, password, webBasePath, listenIP, resetTwoFactor)
+			var lowMemoryModePtr *bool
+			if lowMemoryModeSet {
+				lowMemoryModePtr = &lowMemoryMode
+			}
+			updateSetting(port, username, password, webBasePath, listenIP, resetTwoFactor, lowMemoryModePtr)
 		}
 		if show {
 			showSetting(show)

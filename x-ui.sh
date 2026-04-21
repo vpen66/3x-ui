@@ -5,6 +5,8 @@ green='\033[0;32m'
 blue='\033[0;34m'
 yellow='\033[0;33m'
 plain='\033[0m'
+github_repo="${XUI_GITHUB_REPO:=vpen66/3x-ui}"
+github_raw_base="https://raw.githubusercontent.com/${github_repo}/main"
 
 #Add some basic function here
 function LOGD() {
@@ -77,6 +79,24 @@ mkdir -p "${log_folder}"
 iplimit_log_path="${log_folder}/3xipl.log"
 iplimit_banned_log_path="${log_folder}/3xipl-banned.log"
 
+get_low_memory_mode() {
+    ${xui_folder}/x-ui setting -show true 2>/dev/null | awk '/^lowMemoryMode:/ {print $2}'
+}
+
+is_low_memory_mode_enabled() {
+    [[ "$(get_low_memory_mode)" == "true" ]]
+}
+
+toggle_low_memory_mode() {
+    local target="$1"
+    ${xui_folder}/x-ui setting -lowMemoryMode "${target}" >/dev/null 2>&1
+    if [[ $? == 0 ]]; then
+        LOGI "Low memory mode set to ${target}"
+    else
+        LOGE "Failed to set low memory mode"
+    fi
+}
+
 confirm() {
     if [[ $# > 1 ]]; then
         echo && read -rp "$1 [Default $2]: " temp
@@ -108,7 +128,7 @@ before_show_menu() {
 }
 
 install() {
-    bash <(curl -Ls https://raw.githubusercontent.com/MHSanaei/3x-ui/main/install.sh)
+    XUI_GITHUB_REPO="${github_repo}" bash <(curl -Ls ${github_raw_base}/install.sh)
     if [[ $? == 0 ]]; then
         if [[ $# == 0 ]]; then
             start
@@ -127,7 +147,7 @@ update() {
         fi
         return 0
     fi
-    bash <(curl -Ls https://raw.githubusercontent.com/MHSanaei/3x-ui/main/update.sh)
+    XUI_GITHUB_REPO="${github_repo}" bash <(curl -Ls ${github_raw_base}/update.sh)
     if [[ $? == 0 ]]; then
         LOGI "Update is complete, Panel has automatically restarted "
         before_show_menu
@@ -145,7 +165,7 @@ update_menu() {
         return 0
     fi
 
-    curl -fLRo /usr/bin/x-ui https://raw.githubusercontent.com/MHSanaei/3x-ui/main/x-ui.sh
+    curl -fLRo /usr/bin/x-ui ${github_raw_base}/x-ui.sh
     chmod +x ${xui_folder}/x-ui.sh
     chmod +x /usr/bin/x-ui
 
@@ -167,7 +187,7 @@ legacy_version() {
         exit 1
     fi
     # Use the entered panel version in the download link
-    install_command="bash <(curl -Ls "https://raw.githubusercontent.com/mhsanaei/3x-ui/v$tag_version/install.sh") v$tag_version"
+    install_command="XUI_GITHUB_REPO=${github_repo} bash <(curl -Ls \"https://raw.githubusercontent.com/${github_repo}/v${tag_version}/install.sh\") v${tag_version}"
 
     echo "Downloading and installing panel version $tag_version..."
     eval $install_command
@@ -206,7 +226,7 @@ uninstall() {
     echo ""
     echo -e "Uninstalled Successfully.\n"
     echo "If you need to install this panel again, you can use below command:"
-    echo -e "${green}bash <(curl -Ls https://raw.githubusercontent.com/mhsanaei/3x-ui/master/install.sh)${plain}"
+    echo -e "${green}XUI_GITHUB_REPO=${github_repo} bash <(curl -Ls https://raw.githubusercontent.com/${github_repo}/master/install.sh)${plain}"
     echo ""
     # Trap the SIGTERM signal
     trap delete_script SIGTERM
@@ -349,6 +369,9 @@ start() {
     else
         if [[ $release == "alpine" ]]; then
             rc-service x-ui start
+        elif is_low_memory_mode_enabled; then
+            pkill -f '/usr/local/x-ui/x-ui' >/dev/null 2>&1
+            nohup env XUI_LOW_MEMORY=true ${xui_folder}/x-ui >/var/log/x-ui/manual.log 2>&1 &
         else
             systemctl start x-ui
         fi
@@ -394,6 +417,9 @@ stop() {
 restart() {
     if [[ $release == "alpine" ]]; then
         rc-service x-ui restart
+    elif is_low_memory_mode_enabled; then
+        pkill -f '/usr/local/x-ui/x-ui' >/dev/null 2>&1
+        nohup env XUI_LOW_MEMORY=true ${xui_folder}/x-ui >/var/log/x-ui/manual.log 2>&1 &
     else
         systemctl restart x-ui
     fi
@@ -410,7 +436,11 @@ restart() {
 }
 
 restart_xray() {
-    systemctl reload x-ui
+    if [[ $release == "alpine" ]]; then
+        rc-service x-ui reload
+    else
+        systemctl reload x-ui
+    fi
     LOGI "xray-core Restart signal sent successfully, Please check the log information to confirm whether xray restarted successfully"
     sleep 2
     show_xray_status
@@ -462,6 +492,33 @@ disable() {
     if [[ $# == 0 ]]; then
         before_show_menu
     fi
+}
+
+low_memory_menu() {
+    local current_state="false"
+    current_state=$(get_low_memory_mode)
+    echo -e "${green}\t1.${plain} Enable Low Memory Mode"
+    echo -e "${green}\t2.${plain} Disable Low Memory Mode"
+    echo -e "${green}\t0.${plain} Back to Main Menu"
+    echo -e "Current state: ${yellow}${current_state:-unknown}${plain}"
+    read -rp "Choose an option: " choice
+    case "$choice" in
+    0)
+        show_menu
+        ;;
+    1)
+        toggle_low_memory_mode true
+        confirm_restart
+        ;;
+    2)
+        toggle_low_memory_mode false
+        confirm_restart
+        ;;
+    *)
+        echo -e "${red}Invalid option. Please select a valid number.${plain}\n"
+        low_memory_menu
+        ;;
+    esac
 }
 
 show_log() {
@@ -604,7 +661,7 @@ enable_bbr() {
 }
 
 update_shell() {
-    curl -fLRo /usr/bin/x-ui -z /usr/bin/x-ui https://github.com/MHSanaei/3x-ui/raw/main/x-ui.sh
+    curl -fLRo /usr/bin/x-ui -z /usr/bin/x-ui ${github_raw_base}/x-ui.sh
     if [[ $? != 0 ]]; then
         echo ""
         LOGE "Failed to download script, Please check whether the machine can connect Github"
@@ -2185,6 +2242,7 @@ show_usage() {
 │  ${blue}x-ui settings${plain}              - Current Settings                 │
 │  ${blue}x-ui enable${plain}                - Enable Autostart on OS Startup   │
 │  ${blue}x-ui disable${plain}               - Disable Autostart on OS Startup  │
+│  ${blue}x-ui lowmem${plain}                - Low Memory Mode                  │
 │  ${blue}x-ui log${plain}                   - Check logs                       │
 │  ${blue}x-ui banlog${plain}                - Check Fail2ban ban logs          │
 │  ${blue}x-ui update${plain}                - Update                           │
@@ -2223,19 +2281,20 @@ show_menu() {
 │  ${green}17.${plain} Enable Autostart                          │
 │  ${green}18.${plain} Disable Autostart                         │
 │────────────────────────────────────────────────│
-│  ${green}19.${plain} SSL Certificate Management                │
-│  ${green}20.${plain} Cloudflare SSL Certificate                │
-│  ${green}21.${plain} IP Limit Management                       │
-│  ${green}22.${plain} Firewall Management                       │
-│  ${green}23.${plain} SSH Port Forwarding Management            │
+│  ${green}19.${plain} Low Memory Mode                           │
+│  ${green}20.${plain} SSL Certificate Management                │
+│  ${green}21.${plain} Cloudflare SSL Certificate                │
+│  ${green}22.${plain} IP Limit Management                       │
+│  ${green}23.${plain} Firewall Management                       │
+│  ${green}24.${plain} SSH Port Forwarding Management            │
 │────────────────────────────────────────────────│
-│  ${green}24.${plain} Enable BBR                                │
-│  ${green}25.${plain} Update Geo Files                          │
-│  ${green}26.${plain} Speedtest by Ookla                        │
+│  ${green}25.${plain} Enable BBR                                │
+│  ${green}26.${plain} Update Geo Files                          │
+│  ${green}27.${plain} Speedtest by Ookla                        │
 ╚────────────────────────────────────────────────╝
 "
     show_status
-    echo && read -rp "Please enter your selection [0-26]: " num
+    echo && read -rp "Please enter your selection [0-27]: " num
 
     case "${num}" in
     0)
@@ -2296,31 +2355,34 @@ show_menu() {
         check_install && disable
         ;;
     19)
-        ssl_cert_issue_main
+        check_install && low_memory_menu
         ;;
     20)
-        ssl_cert_issue_CF
+        ssl_cert_issue_main
         ;;
     21)
-        iplimit_main
+        ssl_cert_issue_CF
         ;;
     22)
-        firewall_menu
+        iplimit_main
         ;;
     23)
-        SSH_port_forwarding
+        firewall_menu
         ;;
     24)
-        bbr_menu
+        SSH_port_forwarding
         ;;
     25)
-        update_geo
+        bbr_menu
         ;;
     26)
+        update_geo
+        ;;
+    27)
         run_speedtest
         ;;
     *)
-        LOGE "Please enter the correct number [0-26]"
+        LOGE "Please enter the correct number [0-27]"
         ;;
     esac
 }
@@ -2350,6 +2412,9 @@ if [[ $# > 0 ]]; then
         ;;
     "disable")
         check_install 0 && disable 0
+        ;;
+    "lowmem")
+        check_install 0 && low_memory_menu
         ;;
     "log")
         check_install 0 && show_log 0

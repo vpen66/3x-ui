@@ -27,6 +27,7 @@ type AllSetting struct {
 	WebCertFile   string `json:"webCertFile" form:"webCertFile"`     // Path to SSL certificate file for web server
 	WebKeyFile    string `json:"webKeyFile" form:"webKeyFile"`       // Path to SSL private key file for web server
 	WebBasePath   string `json:"webBasePath" form:"webBasePath"`     // Base path for web panel URLs
+	LowMemoryMode bool   `json:"lowMemoryMode" form:"lowMemoryMode"` // Enable reduced startup mode for low-memory systems
 	SessionMaxAge int    `json:"sessionMaxAge" form:"sessionMaxAge"` // Session maximum age in minutes
 
 	// UI settings

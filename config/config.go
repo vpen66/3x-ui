@@ -57,6 +57,12 @@ func IsDebug() bool {
 	return os.Getenv("XUI_DEBUG") == "true"
 }
 
+// IsLowMemory returns true when startup should avoid eager initialization of
+// heavier background components for memory-constrained environments.
+func IsLowMemory() bool {
+	return os.Getenv("XUI_LOW_MEMORY") == "true"
+}
+
 // GetBinFolderPath returns the path to the binary folder, defaulting to "bin" if not set via XUI_BIN_FOLDER.
 func GetBinFolderPath() string {
 	binFolderPath := os.Getenv("XUI_BIN_FOLDER")

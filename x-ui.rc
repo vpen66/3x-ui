@@ -10,9 +10,21 @@ depend() {
 }
 start_pre(){
     cd /usr/local/x-ui
+    local low_memory_mode
+    low_memory_mode=$(/usr/local/x-ui/x-ui setting -show true 2>/dev/null | awk '/^lowMemoryMode:/ {print $2}')
+    if [ "$low_memory_mode" = "true" ]; then
+        export XUI_LOW_MEMORY=true
+    else
+        unset XUI_LOW_MEMORY
+    fi
 }
 reload() {
   ebegin "Reloading ${RC_SVCNAME}"
-  kill -USR1  $pidfile
+  if [ -f "$pidfile" ]; then
+    kill -USR1 "$(cat "$pidfile")"
+    eend $?
+    return
+  fi
+  pkill -USR1 -f '/usr/local/x-ui/x-ui'
   eend $?
 }

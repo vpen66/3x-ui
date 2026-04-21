@@ -316,7 +316,20 @@ func normalizeExistingGeositeFiles() {
 func (s *Server) startTask() {
 	normalizeExistingGeositeFiles()
 	s.customGeoService.EnsureOnStartup()
-	err := s.xrayService.RestartXray(true)
+
+	lowMemoryMode, err := s.settingService.GetLowMemoryMode()
+	if err != nil {
+		lowMemoryMode = config.IsLowMemory()
+	}
+	if lowMemoryMode {
+		if err := s.settingService.EnsureXrayConfigFile(); err != nil {
+			logger.Warning("Low-memory mode failed to create minimal xray config:", err)
+		}
+		logger.Info("Low-memory mode enabled; skipping automatic xray startup and background jobs.")
+		return
+	}
+
+	err = s.xrayService.RestartXray(true)
 	if err != nil {
 		logger.Warning("start xray failed:", err)
 	}
@@ -468,6 +481,14 @@ func (s *Server) Start() (err error) {
 	s.startTask()
 
 	isTgbotenabled, err := s.settingService.GetTgbotEnabled()
+	lowMemoryMode, lowMemoryErr := s.settingService.GetLowMemoryMode()
+	if lowMemoryErr != nil {
+		lowMemoryMode = config.IsLowMemory()
+	}
+	if lowMemoryMode {
+		logger.Info("Low-memory mode enabled; skipping Telegram bot startup.")
+		return nil
+	}
 	if (err == nil) && (isTgbotenabled) {
 		tgBot := s.tgbotService.NewTgbot()
 		tgBot.Start(i18nFS)

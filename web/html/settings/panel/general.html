@@ -50,6 +50,13 @@
             </template>
         </a-setting-list-item>
         <a-setting-list-item paddings="small">
+            <template #title>{{ i18n "pages.settings.lowMemoryMode" }}</template>
+            <template #description>{{ i18n "pages.settings.lowMemoryModeDesc" }}</template>
+            <template #control>
+                <a-switch v-model="allSetting.lowMemoryMode"></a-switch>
+            </template>
+        </a-setting-list-item>
+        <a-setting-list-item paddings="small">
             <template #title>{{ i18n "pages.settings.sessionMaxAge" }}</template>
             <template #description>{{ i18n "pages.settings.sessionMaxAgeDesc" }}</template>
             <template #control>

@@ -375,6 +375,8 @@
 "privateKeyPathDesc" = "The private key file path for the web panel. (begins with ‘/‘)"
 "panelUrlPath" = "URI Path"
 "panelUrlPathDesc" = "The URI path for the web panel. (begins with ‘/‘ and concludes with ‘/‘)"
+"lowMemoryMode" = "Low Memory Mode"
+"lowMemoryModeDesc" = "Delays Xray and background services so the panel can start on low-memory systems. Restart the panel after changing this."
 "pageSize" = "Pagination Size"
 "pageSizeDesc" = "Define page size for inbounds table. (0 = disable)"
 "remarkModel" = "Remark Model & Separation Character"
