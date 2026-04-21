@@ -53,11 +53,15 @@ func runWebServer() {
 	}
 
 	settingService := service.SettingService{}
-	lowMemoryMode, err := settingService.GetLowMemoryMode()
-	if err != nil {
-		log.Printf("Failed to load low-memory setting, falling back to env only: %v", err)
-		lowMemoryMode = config.IsLowMemory()
+	loadLowMemoryMode := func() bool {
+		lowMemoryMode, err := settingService.GetLowMemoryMode()
+		if err != nil {
+			log.Printf("Failed to load low-memory setting, falling back to env only: %v", err)
+			return config.IsLowMemory()
+		}
+		return lowMemoryMode
 	}
+	lowMemoryMode := loadLowMemoryMode()
 
 	var server *web.Server
 	server = web.NewServer()
@@ -69,10 +73,37 @@ func runWebServer() {
 	}
 
 	var subServer *sub.Server
-	if !lowMemoryMode {
-		subServer = sub.NewServer()
+	startSubServer := func() error {
+		if subServer == nil {
+			subServer = sub.NewServer()
+		}
 		global.SetSubServer(subServer)
-		err = subServer.Start()
+		err := subServer.Start()
+		if err != nil {
+			subServer = nil
+			global.SetSubServer(nil)
+			return err
+		}
+		if subServer.IsRunning() {
+			log.Println("Sub server started successfully.")
+		} else {
+			log.Println("Sub server start skipped because subscription service is disabled or not listening.")
+		}
+		return nil
+	}
+	stopSubServer := func() {
+		if subServer != nil {
+			err := subServer.Stop()
+			if err != nil {
+				logger.Debug("Error stopping sub server:", err)
+			}
+		}
+		subServer = nil
+		global.SetSubServer(nil)
+	}
+
+	if !lowMemoryMode {
+		err = startSubServer()
 		if err != nil {
 			log.Fatalf("Error starting sub server: %v", err)
 			return
@@ -83,13 +114,14 @@ func runWebServer() {
 
 	sigCh := make(chan os.Signal, 1)
 	// Trap shutdown signals
-	signal.Notify(sigCh, syscall.SIGHUP, syscall.SIGTERM, sys.SIGUSR1)
+	signal.Notify(sigCh, syscall.SIGHUP, syscall.SIGTERM, sys.SIGUSR1, sys.SIGUSR2)
 	for {
 		sig := <-sigCh
 
 		switch sig {
 		case syscall.SIGHUP:
 			logger.Info("Received SIGHUP signal. Restarting servers...")
+			lowMemoryMode = loadLowMemoryMode()
 
 			// --- FIX FOR TELEGRAM BOT CONFLICT (409): Stop bot before restart ---
 			service.StopBot()
@@ -99,12 +131,7 @@ func runWebServer() {
 			if err != nil {
 				logger.Debug("Error stopping web server:", err)
 			}
-			if subServer != nil {
-				err = subServer.Stop()
-				if err != nil {
-					logger.Debug("Error stopping sub server:", err)
-				}
-			}
+			stopSubServer()
 
 			server = web.NewServer()
 			global.SetWebServer(server)
@@ -116,17 +143,12 @@ func runWebServer() {
 			log.Println("Web server restarted successfully.")
 
 			if !lowMemoryMode {
-				subServer = sub.NewServer()
-				global.SetSubServer(subServer)
-				err = subServer.Start()
+				err = startSubServer()
 				if err != nil {
 					log.Fatalf("Error restarting sub server: %v", err)
 					return
 				}
-				log.Println("Sub server restarted successfully.")
 			} else {
-				subServer = nil
-				global.SetSubServer(nil)
 				log.Println("Low-memory mode enabled; skipping sub server restart.")
 			}
 		case sys.SIGUSR1:
@@ -135,6 +157,16 @@ func runWebServer() {
 			if err != nil {
 				logger.Error("Failed to restart xray-core:", err)
 			}
+		case sys.SIGUSR2:
+			logger.Info("Received USR2 signal, starting sub server...")
+			if subServer != nil && subServer.IsRunning() {
+				logger.Info("Sub server is already running.")
+				continue
+			}
+			err := startSubServer()
+			if err != nil {
+				logger.Error("Failed to start sub server:", err)
+			}
 
 		default:
 			// --- FIX FOR TELEGRAM BOT CONFLICT (409) on full shutdown ---
@@ -142,9 +174,7 @@ func runWebServer() {
 			// ------------------------------------------------------------
 
 			server.Stop()
-			if subServer != nil {
-				subServer.Stop()
-			}
+			stopSubServer()
 			log.Println("Shutting down servers.")
 			return
 		}

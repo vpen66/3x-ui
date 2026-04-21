@@ -449,6 +449,19 @@ restart_xray() {
     fi
 }
 
+start_sub_server() {
+    check_status
+    if [[ $? == 1 ]]; then
+        LOGE "Panel is not running. Please start the panel first."
+    else
+        pkill -USR2 -f '/usr/local/x-ui/x-ui' >/dev/null 2>&1
+        LOGI "Sub server start signal sent successfully. Please check panel logs or subscription endpoint to confirm it is listening."
+    fi
+    if [[ $# == 0 ]]; then
+        before_show_menu
+    fi
+}
+
 status() {
     if [[ $release == "alpine" ]]; then
         rc-service x-ui status
@@ -2238,6 +2251,7 @@ show_usage() {
 │  ${blue}x-ui stop${plain}                  - Stop                             │
 │  ${blue}x-ui restart${plain}               - Restart                          │
 |  ${blue}x-ui restart-xray${plain}          - Restart Xray                     │
+│  ${blue}x-ui start-sub${plain}             - Start Sub Server                 │
 │  ${blue}x-ui status${plain}                - Current Status                   │
 │  ${blue}x-ui settings${plain}              - Current Settings                 │
 │  ${blue}x-ui enable${plain}                - Enable Autostart on OS Startup   │
@@ -2275,26 +2289,27 @@ show_menu() {
 │  ${green}12.${plain} Stop                                      │
 │  ${green}13.${plain} Restart                                   │
 |  ${green}14.${plain} Restart Xray                              │
-│  ${green}15.${plain} Check Status                              │
-│  ${green}16.${plain} Logs Management                           │
+│  ${green}15.${plain} Start Sub Server                          │
+│  ${green}16.${plain} Check Status                              │
+│  ${green}17.${plain} Logs Management                           │
 │────────────────────────────────────────────────│
-│  ${green}17.${plain} Enable Autostart                          │
-│  ${green}18.${plain} Disable Autostart                         │
+│  ${green}18.${plain} Enable Autostart                          │
+│  ${green}19.${plain} Disable Autostart                         │
 │────────────────────────────────────────────────│
-│  ${green}19.${plain} Low Memory Mode                           │
-│  ${green}20.${plain} SSL Certificate Management                │
-│  ${green}21.${plain} Cloudflare SSL Certificate                │
-│  ${green}22.${plain} IP Limit Management                       │
-│  ${green}23.${plain} Firewall Management                       │
-│  ${green}24.${plain} SSH Port Forwarding Management            │
+│  ${green}20.${plain} Low Memory Mode                           │
+│  ${green}21.${plain} SSL Certificate Management                │
+│  ${green}22.${plain} Cloudflare SSL Certificate                │
+│  ${green}23.${plain} IP Limit Management                       │
+│  ${green}24.${plain} Firewall Management                       │
+│  ${green}25.${plain} SSH Port Forwarding Management            │
 │────────────────────────────────────────────────│
-│  ${green}25.${plain} Enable BBR                                │
-│  ${green}26.${plain} Update Geo Files                          │
-│  ${green}27.${plain} Speedtest by Ookla                        │
+│  ${green}26.${plain} Enable BBR                                │
+│  ${green}27.${plain} Update Geo Files                          │
+│  ${green}28.${plain} Speedtest by Ookla                        │
 ╚────────────────────────────────────────────────╝
 "
     show_status
-    echo && read -rp "Please enter your selection [0-27]: " num
+    echo && read -rp "Please enter your selection [0-28]: " num
 
     case "${num}" in
     0)
@@ -2343,46 +2358,49 @@ show_menu() {
         check_install && restart_xray
         ;;
     15)
-        check_install && status
+        check_install && start_sub_server
         ;;
     16)
-        check_install && show_log
+        check_install && status
         ;;
     17)
-        check_install && enable
+        check_install && show_log
         ;;
     18)
-        check_install && disable
+        check_install && enable
         ;;
     19)
-        check_install && low_memory_menu
+        check_install && disable
         ;;
     20)
-        ssl_cert_issue_main
+        check_install && low_memory_menu
         ;;
     21)
-        ssl_cert_issue_CF
+        ssl_cert_issue_main
         ;;
     22)
-        iplimit_main
+        ssl_cert_issue_CF
         ;;
     23)
-        firewall_menu
+        iplimit_main
         ;;
     24)
-        SSH_port_forwarding
+        firewall_menu
         ;;
     25)
-        bbr_menu
+        SSH_port_forwarding
         ;;
     26)
-        update_geo
+        bbr_menu
         ;;
     27)
+        update_geo
+        ;;
+    28)
         run_speedtest
         ;;
     *)
-        LOGE "Please enter the correct number [0-27]"
+        LOGE "Please enter the correct number [0-28]"
         ;;
     esac
 }
@@ -2400,6 +2418,9 @@ if [[ $# > 0 ]]; then
         ;;
     "restart-xray")
         check_install 0 && restart_xray 0
+        ;;
+    "start-sub")
+        check_install 0 && start_sub_server 0
         ;;
     "status")
         check_install 0 && status 0

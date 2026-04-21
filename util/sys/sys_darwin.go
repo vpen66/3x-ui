@@ -14,6 +14,7 @@ import (
 )
 
 var SIGUSR1 = syscall.SIGUSR1
+var SIGUSR2 = syscall.SIGUSR2
 
 func GetTCPCount() (int, error) {
 	stats, err := net.Connections("tcp")

@@ -116,6 +116,12 @@
       },
       oldAllSetting: new AllSetting(),
       allSetting: new AllSetting(),
+      subServerStatus: {
+        running: false,
+        enabled: false,
+        lowMemoryMode: false,
+      },
+      subServerLoading: false,
       saveBtnDisable: true,
       entryHost: null,
       entryPort: null,
@@ -273,6 +279,12 @@
           this.saveBtnDisable = true;
         }
       },
+      async refreshSubServerStatus() {
+        const msg = await HttpUtil.get("/panel/api/server/subServiceStatus");
+        if (msg && msg.success && msg.obj) {
+          this.subServerStatus = msg.obj;
+        }
+      },
       async loadInboundTags() {
         const msg = await HttpUtil.get("/panel/api/inbounds/list");
         if (msg && msg.success && Array.isArray(msg.obj)) {
@@ -290,6 +302,19 @@
         this.loading(false);
         if (msg.success) {
           await this.getAllSetting();
+          await this.refreshSubServerStatus();
+        }
+      },
+      async startSubServer() {
+        if (!this.saveBtnDisable) {
+          return;
+        }
+        this.subServerLoading = true;
+        const msg = await HttpUtil.post("/panel/api/server/startSubService");
+        this.subServerLoading = false;
+        if (msg.success) {
+          await PromiseUtil.sleep(500);
+          await this.refreshSubServerStatus();
         }
       },
       async updateUser() {
@@ -624,6 +649,7 @@
       this.entryProtocol = window.location.protocol;
       this.entryIsIP = this._isIp(this.entryHost);
       await this.getAllSetting();
+      await this.refreshSubServerStatus();
       await this.loadInboundTags();
       while (true) {
         await PromiseUtil.sleep(1000);

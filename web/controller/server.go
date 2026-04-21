@@ -3,10 +3,13 @@ package controller
 import (
 	"fmt"
 	"net/http"
+	"os"
 	"regexp"
 	"strconv"
+	"syscall"
 	"time"
 
+	"github.com/mhsanaei/3x-ui/v2/util/sys"
 	"github.com/mhsanaei/3x-ui/v2/web/global"
 	"github.com/mhsanaei/3x-ui/v2/web/service"
 	"github.com/mhsanaei/3x-ui/v2/web/websocket"
@@ -50,9 +53,11 @@ func (a *ServerController) initRouter(g *gin.RouterGroup) {
 	g.GET("/getNewmldsa65", a.getNewmldsa65)
 	g.GET("/getNewmlkem768", a.getNewmlkem768)
 	g.GET("/getNewVlessEnc", a.getNewVlessEnc)
+	g.GET("/subServiceStatus", a.subServiceStatus)
 
 	g.POST("/stopXrayService", a.stopXrayService)
 	g.POST("/restartXrayService", a.restartXrayService)
+	g.POST("/startSubService", a.startSubService)
 	g.POST("/installXray/:version", a.installXray)
 	g.POST("/updateGeofile", a.updateGeofile)
 	g.POST("/updateGeofile/:fileName", a.updateGeofile)
@@ -86,6 +91,24 @@ func (a *ServerController) startTask() {
 
 // status returns the current server status information.
 func (a *ServerController) status(c *gin.Context) { jsonObj(c, a.lastStatus, nil) }
+
+// subServiceStatus returns the current subscription server state.
+func (a *ServerController) subServiceStatus(c *gin.Context) {
+	lowMemoryMode, _ := a.settingService.GetLowMemoryMode()
+	subEnable, _ := a.settingService.GetSubEnable()
+
+	running := false
+	subServer := global.GetSubServer()
+	if subServer != nil && subServer.IsRunning() {
+		running = true
+	}
+
+	jsonObj(c, gin.H{
+		"running":       running,
+		"enabled":       subEnable,
+		"lowMemoryMode": lowMemoryMode,
+	}, nil)
+}
 
 // getCpuHistoryBucket retrieves aggregated CPU usage history based on the specified time bucket.
 func (a *ServerController) getCpuHistoryBucket(c *gin.Context) {
@@ -185,6 +208,47 @@ func (a *ServerController) restartXrayService(c *gin.Context) {
 		"Xray service has been restarted successfully",
 		"success",
 	)
+}
+
+// startSubService sends a signal to the running panel process to start the subscription server.
+func (a *ServerController) startSubService(c *gin.Context) {
+	subEnable, err := a.settingService.GetSubEnable()
+	if err != nil {
+		jsonMsg(c, I18nWeb(c, "pages.settings.toasts.startSubServerError"), err)
+		return
+	}
+	if !subEnable {
+		jsonMsg(c, I18nWeb(c, "pages.settings.toasts.startSubServerError"), fmt.Errorf("subscription service is disabled"))
+		return
+	}
+
+	subServer := global.GetSubServer()
+	if subServer != nil && subServer.IsRunning() {
+		jsonMsg(c, I18nWeb(c, "pages.settings.toasts.startSubServer"), nil)
+		return
+	}
+
+	process, err := os.FindProcess(os.Getpid())
+	if err != nil {
+		jsonMsg(c, I18nWeb(c, "pages.settings.toasts.startSubServerError"), err)
+		return
+	}
+	if err := process.Signal(syscall.Signal(sys.SIGUSR2)); err != nil {
+		jsonMsg(c, I18nWeb(c, "pages.settings.toasts.startSubServerError"), err)
+		return
+	}
+
+	deadline := time.Now().Add(3 * time.Second)
+	for time.Now().Before(deadline) {
+		subServer = global.GetSubServer()
+		if subServer != nil && subServer.IsRunning() {
+			jsonMsg(c, I18nWeb(c, "pages.settings.toasts.startSubServer"), nil)
+			return
+		}
+		time.Sleep(200 * time.Millisecond)
+	}
+
+	jsonMsg(c, I18nWeb(c, "pages.settings.toasts.startSubServerError"), fmt.Errorf("timed out waiting for sub server to start"))
 }
 
 // getLogs retrieves the application logs based on count, level, and syslog filters.

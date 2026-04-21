@@ -23,6 +23,7 @@ type WebServer interface {
 // SubServer interface defines methods for accessing the subscription server instance.
 type SubServer interface {
 	GetCtx() context.Context // Get the server context
+	IsRunning() bool         // Report whether the server is listening
 }
 
 // SetWebServer sets the global web server instance.

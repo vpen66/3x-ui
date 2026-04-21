@@ -72,6 +72,25 @@
                     v-model="allSetting.subURI"></a-input>
             </template>
         </a-setting-list-item>
+        <a-setting-list-item paddings="small">
+            <template #title>{{ i18n "pages.settings.subServerControl"}}</template>
+            <template #description>{{ i18n "pages.settings.subServerControlDesc"}}</template>
+            <template #control>
+                <a-space direction="vertical" :size="8" style="width: 100%; align-items: flex-end;">
+                    <a-tag :color="subServerStatus.running ? 'green' : 'orange'">
+                        [[ subServerStatus.running ? i18n('pages.settings.subServerRunning') : i18n('pages.settings.subServerStopped') ]]
+                    </a-tag>
+                    <a-button
+                        type="primary"
+                        icon="play-circle"
+                        :loading="subServerLoading"
+                        :disabled="subServerStatus.running || !allSetting.subEnable || !saveBtnDisable"
+                        @click="startSubServer">
+                        {{ i18n "pages.settings.subServerStart" }}
+                    </a-button>
+                </a-space>
+            </template>
+        </a-setting-list-item>
     </a-collapse-panel>
     <a-collapse-panel key="2" header='{{ i18n "pages.settings.information" }}'>
         <a-setting-list-item paddings="small">

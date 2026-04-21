@@ -381,10 +381,17 @@ func (s *Server) Stop() error {
 	if s.listener != nil {
 		err2 = s.listener.Close()
 	}
+	s.httpServer = nil
+	s.listener = nil
 	return common.Combine(err1, err2)
 }
 
 // GetCtx returns the server's context for cancellation and deadline management.
 func (s *Server) GetCtx() context.Context {
 	return s.ctx
+}
+
+// IsRunning reports whether the subscription server currently has an active listener.
+func (s *Server) IsRunning() bool {
+	return s != nil && s.listener != nil
 }

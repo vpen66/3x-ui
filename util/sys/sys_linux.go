@@ -16,6 +16,7 @@ import (
 )
 
 var SIGUSR1 = syscall.SIGUSR1
+var SIGUSR2 = syscall.SIGUSR2
 
 func getLinesNum(filename string) (int, error) {
 	file, err := os.Open(filename)
