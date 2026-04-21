@@ -664,6 +664,56 @@ prompt_and_setup_ssl() {
     esac
 }
 
+configure_low_memory_mode() {
+    local current_low_memory="false"
+    local prompt_default="n"
+    local current_line=""
+
+    current_line=$(${xui_folder}/x-ui setting -show true 2>/dev/null | grep -E '^lowMemoryMode:' || true)
+    if [[ -n "${current_line}" ]]; then
+        current_low_memory=$(echo "${current_line}" | awk -F': ' '{print $2}' | tr -d '[:space:]')
+    fi
+
+    if [[ "${current_low_memory}" == "true" ]]; then
+        prompt_default="y"
+    fi
+
+    echo ""
+    echo -e "${green}═══════════════════════════════════════════${plain}"
+    echo -e "${green}        Low Memory Mode Configuration      ${plain}"
+    echo -e "${green}═══════════════════════════════════════════${plain}"
+    echo -e "${yellow}Enable this on small servers to skip sub-server, auto xray startup, and background jobs during panel startup.${plain}"
+    echo -e "${yellow}Recommended for low-memory machines such as 256MB or 512MB VPS.${plain}"
+
+    local enable_low_memory=""
+    if [[ "${prompt_default}" == "y" ]]; then
+        read -rp "Enable Low Memory Mode? [Y/n]: " enable_low_memory
+    else
+        read -rp "Enable Low Memory Mode? [y/N]: " enable_low_memory
+    fi
+
+    enable_low_memory="${enable_low_memory// /}"
+    if [[ -z "${enable_low_memory}" ]]; then
+        enable_low_memory="${prompt_default}"
+    fi
+
+    if [[ "${enable_low_memory}" == "y" || "${enable_low_memory}" == "Y" ]]; then
+        ${xui_folder}/x-ui setting -lowMemoryMode true >/dev/null 2>&1
+        if [[ $? -eq 0 ]]; then
+            echo -e "${green}Low Memory Mode enabled.${plain}"
+        else
+            echo -e "${yellow}Failed to enable Low Memory Mode automatically.${plain}"
+        fi
+    else
+        ${xui_folder}/x-ui setting -lowMemoryMode false >/dev/null 2>&1
+        if [[ $? -eq 0 ]]; then
+            echo -e "${green}Low Memory Mode disabled.${plain}"
+        else
+            echo -e "${yellow}Failed to disable Low Memory Mode automatically.${plain}"
+        fi
+    fi
+}
+
 config_after_install() {
     local existing_hasDefaultCredential=$(${xui_folder}/x-ui setting -show true | grep -Eo 'hasDefaultCredential: .+' | awk '{print $2}')
     local existing_webBasePath=$(${xui_folder}/x-ui setting -show true | grep -Eo 'webBasePath: .+' | awk '{print $2}' | sed 's#^/##')
@@ -783,6 +833,7 @@ config_after_install() {
         fi
     fi
     
+    configure_low_memory_mode
     ${xui_folder}/x-ui migrate
 }
 
