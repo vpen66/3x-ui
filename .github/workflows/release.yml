@@ -117,6 +117,7 @@ jobs:
 
           mkdir x-ui
           cp xui-release x-ui/
+          cp x-ui.rc x-ui/
           cp x-ui.service.debian x-ui/
           cp x-ui.service.arch x-ui/
           cp x-ui.service.rhel x-ui/
