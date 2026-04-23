@@ -12,7 +12,6 @@ const Protocols = {
 };
 
 const SSMethods = {
-    AES_256_GCM: 'aes-256-gcm',
     CHACHA20_POLY1305: 'chacha20-poly1305',
     CHACHA20_IETF_POLY1305: 'chacha20-ietf-poly1305',
     XCHACHA20_IETF_POLY1305: 'xchacha20-ietf-poly1305',
@@ -1396,6 +1395,8 @@ class Inbound extends XrayCommonClass {
         if (protocol === Protocols.HYSTERIA) {
             this.stream.network = 'hysteria';
             this.stream.security = 'tls';
+            // Hysteria runs over QUIC and must not inherit TCP TLS ALPN defaults.
+            this.stream.tls.alpn = [ALPN_OPTION.H3];
         }
     }
 
