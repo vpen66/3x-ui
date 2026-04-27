@@ -1,6 +1,18 @@
 {{define "modals/textModal"}}
 <a-modal id="text-modal" v-model="txtModal.visible" :title="txtModal.title" :closable="true"
     :class="themeSwitcher.currentTheme">
+    <template v-if="txtModal.variantEnabled && txtModal.variants.length > 1">
+        <a-space style="margin-bottom: 12px;">
+            <a-button
+                v-for="variant in txtModal.variants"
+                :key="variant.key"
+                size="small"
+                :type="txtModal.activeVariant === variant.key ? 'primary' : 'default'"
+                @click="setActiveVariant(variant.key)">
+                [[ variant.label ]]
+            </a-button>
+        </a-space>
+    </template>
     <a-input :style="{ overflowY: 'auto' }" type="textarea" v-model="txtModal.content"
         :autosize="{ minRows: 10, maxRows: 20}"></a-input>
     <template slot="footer">
@@ -18,13 +30,25 @@
     const txtModal = {
         title: '',
         content: '',
+        baseContent: '',
         fileName: '',
+        options: {},
+        variantEnabled: false,
+        variants: [],
+        activeVariant: 'default',
         qrcode: null,
         visible: false,
-        show: function (title = '', content = '', fileName = '') {
+        show: function (title = '', content = '', fileName = '', options = {}) {
             this.title = title;
             this.content = content;
+            this.baseContent = content;
             this.fileName = fileName;
+            this.options = options || {};
+            this.variantEnabled = !!this.options.subscriptionLinks;
+            this.activeVariant = 'default';
+            this.variants = [
+                { key: 'default', label: '默认', content: content }
+            ];
             this.visible = true;
         },
         copy: function (content = '') {
@@ -46,6 +70,155 @@
         data: {
             txtModal: txtModal,
         },
+        methods: {
+            setActiveVariant(key) {
+                const variant = this.txtModal.variants.find(item => item.key === key);
+                if (!variant) {
+                    return;
+                }
+                this.txtModal.activeVariant = key;
+                this.txtModal.content = variant.content;
+            },
+            async ensureSubscriptionVariants() {
+                if (!this.txtModal.visible || !this.txtModal.variantEnabled) {
+                    return;
+                }
+
+                const currentVariants = [
+                    { key: 'default', label: '默认', content: this.txtModal.baseContent }
+                ];
+
+                let publicIP = this.txtModal.options.publicIP || null;
+                if (!publicIP) {
+                    try {
+                        const msg = await HttpUtil.get('/panel/api/server/status');
+                        if (msg.success && msg.obj && msg.obj.publicIP) {
+                            publicIP = msg.obj.publicIP;
+                        }
+                    } catch (e) {
+                        console.error('Failed to get server status:', e);
+                    }
+                }
+
+                const ipv4 = publicIP && publicIP.ipv4 && publicIP.ipv4 !== 'N/A' ? publicIP.ipv4 : '';
+                const ipv6 = publicIP && publicIP.ipv6 && publicIP.ipv6 !== 'N/A' ? publicIP.ipv6 : '';
+
+                if (ipv4) {
+                    currentVariants.push({
+                        key: 'ipv4',
+                        label: 'IPv4',
+                        content: this.replaceSubscriptionHosts(this.txtModal.baseContent, ipv4),
+                    });
+                }
+
+                if (ipv6) {
+                    currentVariants.push({
+                        key: 'ipv6',
+                        label: 'IPv6',
+                        content: this.replaceSubscriptionHosts(this.txtModal.baseContent, ipv6),
+                    });
+                }
+
+                this.txtModal.variants = currentVariants;
+                this.setActiveVariant(this.txtModal.activeVariant || 'default');
+            },
+            replaceSubscriptionHosts(content, host) {
+                return (content || '')
+                    .split(/\r?\n/)
+                    .map(line => this.replaceLineHost(line, host))
+                    .join('\n');
+            },
+            replaceLineHost(line, host) {
+                const trimmed = (line || '').trim();
+                if (!trimmed) {
+                    return line;
+                }
+
+                if (trimmed.startsWith('vmess://')) {
+                    return this.replaceVmessHost(line, host);
+                }
+
+                if (trimmed.startsWith('ss://')) {
+                    return this.replaceSsHost(line, host);
+                }
+
+                if (trimmed.includes('Endpoint = ')) {
+                    return this.replaceWireGuardHost(line, host);
+                }
+
+                if (
+                    trimmed.startsWith('vless://') ||
+                    trimmed.startsWith('trojan://') ||
+                    trimmed.startsWith('hysteria://') ||
+                    trimmed.startsWith('http://') ||
+                    trimmed.startsWith('https://')
+                ) {
+                    return this.replaceURLHost(line, host);
+                }
+
+                return line;
+            },
+            replaceURLHost(line, host) {
+                const trimmed = line.trim();
+                try {
+                    const url = new URL(trimmed);
+                    url.hostname = host;
+                    return url.toString();
+                } catch (e) {
+                    return line;
+                }
+            },
+            replaceVmessHost(line, host) {
+                const trimmed = line.trim();
+                try {
+                    const payload = trimmed.slice('vmess://'.length);
+                    const decoded = atob(payload);
+                    const data = JSON.parse(decoded);
+                    if (!data.add) {
+                        return line;
+                    }
+                    data.add = host;
+                    return 'vmess://' + btoa(JSON.stringify(data));
+                } catch (e) {
+                    return line;
+                }
+            },
+            replaceSsHost(line, host) {
+                const trimmed = line.trim();
+                const match = trimmed.match(/^(ss:\/\/(?:[^@]+@)?)(\[[^\]]+\]|[^:/?#]+)(:\d+(?:[/?#].*)?)$/i);
+                if (!match) {
+                    return line;
+                }
+                return match[1] + this.formatHostForAuthority(host) + match[3];
+            },
+            replaceWireGuardHost(line, host) {
+                return line.replace(/(Endpoint = )(\[[^\]]+\]|[^:]+)(:\d+)/, (_, prefix, _currentHost, port) => {
+                    return prefix + this.formatHostForAuthority(host) + port;
+                });
+            },
+            formatHostForAuthority(host) {
+                if (!host) {
+                    return host;
+                }
+                if (host.includes(':') && !host.startsWith('[') && !host.endsWith(']')) {
+                    return `[${host}]`;
+                }
+                return host;
+            },
+        },
+        watch: {
+            'txtModal.visible': {
+                immediate: false,
+                handler(visible) {
+                    if (!visible) {
+                        return;
+                    }
+                    if (this.txtModal.variantEnabled) {
+                        this.ensureSubscriptionVariants();
+                    }
+                }
+            }
+        }
     });
 </script>
 {{end}}

@@ -80,6 +80,18 @@
                     </template>
 
                     <a-form layout="vertical">
+                        <a-form-item v-if="availableVariants.length > 1">
+                            <a-space>
+                                <a-button
+                                    v-for="variant in availableVariants"
+                                    :key="variant.key"
+                                    size="small"
+                                    :type="hostVariant === variant.key ? 'primary' : 'default'"
+                                    @click="setHostVariant(variant.key)">
+                                    [[ variant.label ]]
+                                </a-button>
+                            </a-space>
+                        </a-form-item>
                         <a-form-item>
                             <a-space direction="vertical" align="center">
                                 <a-row type="flex" :gutter="[8,8]" justify="center" style="width:100%">
@@ -92,7 +104,7 @@
                                             <tr-qr-bg class="qr-bg-sub">
                                                 <tr-qr-bg-inner class="qr-bg-sub-inner">
                                                     <canvas id="qrcode" class="qr-cv" title='{{ i18n "copy" }}'
-                                                        @click="copy(app.subUrl)"></canvas>
+                                                        @click="copy(variantSubUrl)"></canvas>
                                                 </tr-qr-bg-inner>
                                             </tr-qr-bg>
                                         </tr-qr-box>
@@ -107,7 +119,7 @@
                                             <tr-qr-bg class="qr-bg-sub">
                                                 <tr-qr-bg-inner class="qr-bg-sub-inner">
                                                     <canvas id="qrcode-subjson" class="qr-cv" title='{{ i18n "copy" }}'
-                                                        @click="copy(app.subJsonUrl)"></canvas>
+                                                        @click="copy(variantSubJsonUrl)"></canvas>
                                                 </tr-qr-bg-inner>
                                             </tr-qr-bg>
                                         </tr-qr-box>
@@ -120,7 +132,7 @@
                                             <tr-qr-bg class="qr-bg-sub">
                                                 <tr-qr-bg-inner class="qr-bg-sub-inner">
                                                     <canvas id="qrcode-subclash" class="qr-cv" title='{{ i18n "copy" }}'
-                                                        @click="copy(app.subClashUrl)"></canvas>
+                                                        @click="copy(variantSubClashUrl)"></canvas>
                                                 </tr-qr-bg-inner>
                                             </tr-qr-bg>
                                         </tr-qr-box>
@@ -209,17 +221,17 @@
                                         </a-button>
                                         <a-menu slot="overlay" :class="themeSwitcher.currentTheme">
                                             <a-menu-item key="android-v2box"
-                                                @click="open('v2box://install-sub?url=' + encodeURIComponent(app.subUrl) + '&name=' + encodeURIComponent(app.sId))">V2Box</a-menu-item>
+                                                @click="open('v2box://install-sub?url=' + encodeURIComponent(variantSubUrl) + '&name=' + encodeURIComponent(app.sId))">V2Box</a-menu-item>
                                             <a-menu-item key="android-v2rayng"
-                                                @click="open('v2rayng://install-config?url=' + encodeURIComponent(app.subUrl))">V2RayNG</a-menu-item>
+                                                @click="open('v2rayng://install-config?url=' + encodeURIComponent(variantSubUrl))">V2RayNG</a-menu-item>
                                             <a-menu-item key="android-singbox"
-                                                @click="copy(app.subUrl)">Sing-box</a-menu-item>
+                                                @click="copy(variantSubUrl)">Sing-box</a-menu-item>
                                             <a-menu-item key="android-v2raytun"
-                                                @click="copy(app.subUrl)">V2RayTun</a-menu-item>
-                                            <a-menu-item key="android-npvtunnel" @click="copy(app.subUrl)">NPV
+                                                @click="copy(variantSubUrl)">V2RayTun</a-menu-item>
+                                            <a-menu-item key="android-npvtunnel" @click="copy(variantSubUrl)">NPV
                                                 Tunnel</a-menu-item>
                                             <a-menu-item key="android-happ"
-                                                @click="open('happ://add/' + app.subUrl)">Happ</a-menu-item>
+                                                @click="open('happ://add/' + variantSubUrl)">Happ</a-menu-item>
                                         </a-menu>
                                     </a-dropdown>
                                 </a-col>

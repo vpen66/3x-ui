@@ -320,25 +320,35 @@
       </table>
       <template v-if="app.subSettings.enable && infoModal.clientSettings.subId">
         <a-divider>Subscription URL</a-divider>
+        <a-space v-if="availableVariants.length > 1" style="margin-bottom: 12px;">
+          <a-button
+            v-for="variant in availableVariants"
+            :key="variant.key"
+            size="small"
+            :type="hostVariant === variant.key ? 'primary' : 'default'"
+            @click="setHostVariant(variant.key)">
+            [[ variant.label ]]
+          </a-button>
+        </a-space>
         <tr-info-row class="tr-info-row">
           <tr-info-title class="tr-info-title">
             <a-tag color="purple">Subscription Link</a-tag>
             <a-tooltip title='{{ i18n "copy" }}'>
-              <a-button size="small" icon="snippets" @click="copy(infoModal.subLink)"></a-button>
+              <a-button size="small" icon="snippets" @click="copy(displaySubLink)"></a-button>
             </a-tooltip>
           </tr-info-title>
-          <a :href="[[ infoModal.subLink ]]" target="_blank">[[
-            infoModal.subLink ]]</a>
+          <a :href="[[ displaySubLink ]]" target="_blank">[[
+            displaySubLink ]]</a>
         </tr-info-row>
         <tr-info-row class="tr-info-row" v-if="app.subSettings.subJsonEnable">
           <tr-info-title class="tr-info-title">
             <a-tag color="purple">Json Link</a-tag>
             <a-tooltip title='{{ i18n "copy" }}'>
-              <a-button size="small" icon="snippets" @click="copy(infoModal.subJsonLink)"></a-button>
+              <a-button size="small" icon="snippets" @click="copy(displaySubJsonLink)"></a-button>
             </a-tooltip>
           </tr-info-title>
-          <a :href="[[ infoModal.subJsonLink ]]" target="_blank">[[
-            infoModal.subJsonLink ]]</a>
+          <a :href="[[ displaySubJsonLink ]]" target="_blank">[[
+            displaySubJsonLink ]]</a>
         </tr-info-row>
       </template>
       <template v-if="app.tgBotEnable && infoModal.clientSettings.tgId">
@@ -359,10 +369,10 @@
             <a-tag class="tr-info-tag" color="green">[[ link.remark
               ]]</a-tag>
             <a-tooltip title='{{ i18n "copy" }}'>
-              <a-button :style="{ minWidth: '24px' }" size="small" icon="snippets" @click="copy(link.link)"></a-button>
+              <a-button :style="{ minWidth: '24px' }" size="small" icon="snippets" @click="copy(getDisplayLink(link.link))"></a-button>
             </a-tooltip>
           </tr-info-title>
-          <code>[[ link.link ]]</code>
+          <code>[[ getDisplayLink(link.link) ]]</code>
         </tr-info-row>
       </template>
     </template>
@@ -374,10 +384,10 @@
             <a-tag class="tr-info-tag" color="green">[[ link.remark
               ]]</a-tag>
             <a-tooltip title='{{ i18n "copy" }}'>
-              <a-button :style="{ minWidth: '24px' }" size="small" icon="snippets" @click="copy(link.link)"></a-button>
+              <a-button :style="{ minWidth: '24px' }" size="small" icon="snippets" @click="copy(getDisplayLink(link.link))"></a-button>
             </a-tooltip>
           </tr-info-title>
-          <code>[[ link.link ]]</code>
+          <code>[[ getDisplayLink(link.link) ]]</code>
         </tr-info-row>
       </template>
       <table v-if="inbound.protocol == Protocols.TUNNEL" class="tr-info-table">
@@ -658,28 +668,34 @@
   const infoModalApp = new Vue({
     delimiters: ['[[', ']]'],
     el: '#inbound-info-modal',
-    data: {
-      infoModal,
-      refreshing: false,
-      get dbInbound() {
+    data() {
+      return {
+        infoModal,
+        refreshing: false,
+        serverStatus: null,
+        hostVariant: 'default',
+      };
+    },
+    computed: {
+      dbInbound() {
         return this.infoModal.dbInbound;
       },
-      get inbound() {
+      inbound() {
         return this.infoModal.inbound;
       },
-      get isActive() {
+      isActive() {
         if (infoModal.clientStats) {
           return infoModal.clientStats.enable;
         }
         return true;
       },
-      get isEnable() {
+      isEnable() {
         if (infoModal.clientSettings) {
           return infoModal.clientSettings.enable;
         }
         return infoModal.dbInbound.isEnable;
       },
-      get isDepleted() {
+      isDepleted() {
         const stats = infoModal.clientStats;
         const settings = infoModal.clientSettings;
         if (!stats || !settings) {
@@ -697,6 +713,23 @@
 
         return expired || exhausted;
       },
+      displaySubLink() {
+        return this.getDisplayLink(infoModal.subLink);
+      },
+      displaySubJsonLink() {
+        return this.getDisplayLink(infoModal.subJsonLink);
+      },
+      availableVariants() {
+        const variants = [{ key: 'default', label: '默认' }];
+        const publicIP = this.serverStatus && this.serverStatus.publicIP ? this.serverStatus.publicIP : null;
+        if (publicIP && publicIP.ipv4 && publicIP.ipv4 !== 'N/A') {
+          variants.push({ key: 'ipv4', label: 'IPv4' });
+        }
+        if (publicIP && publicIP.ipv6 && publicIP.ipv6 !== 'N/A') {
+          variants.push({ key: 'ipv6', label: 'IPv6' });
+        }
+        return variants;
+      }
     },
     methods: {
       formatIpInfo(ipInfo) {
@@ -764,7 +797,116 @@
           })
           .catch(() => { });
       },
+      async ensureServerStatus() {
+        if (this.serverStatus) {
+          return;
+        }
+        try {
+          const msg = await HttpUtil.get('/panel/api/server/status');
+          if (msg.success) {
+            this.serverStatus = msg.obj;
+          }
+        } catch (e) {
+          console.error('Failed to get server status:', e);
+        }
+      },
+      setHostVariant(variant) {
+        this.hostVariant = variant;
+      },
+      getVariantHost() {
+        if (!this.serverStatus || !this.serverStatus.publicIP) {
+          return '';
+        }
+        if (this.hostVariant === 'ipv4') {
+          return this.serverStatus.publicIP.ipv4 && this.serverStatus.publicIP.ipv4 !== 'N/A' ? this.serverStatus.publicIP.ipv4 : '';
+        }
+        if (this.hostVariant === 'ipv6') {
+          return this.serverStatus.publicIP.ipv6 && this.serverStatus.publicIP.ipv6 !== 'N/A' ? this.serverStatus.publicIP.ipv6 : '';
+        }
+        return '';
+      },
+      getDisplayLink(link) {
+        const host = this.getVariantHost();
+        return host ? this.replaceLineHost(link, host) : link;
+      },
+      replaceLineHost(line, host) {
+        const trimmed = (line || '').trim();
+        if (!trimmed) {
+          return line;
+        }
+        if (trimmed.startsWith('vmess://')) {
+          return this.replaceVmessHost(line, host);
+        }
+        if (trimmed.startsWith('ss://')) {
+          return this.replaceSsHost(line, host);
+        }
+        if (trimmed.includes('Endpoint = ')) {
+          return this.replaceWireGuardHost(line, host);
+        }
+        if (
+          trimmed.startsWith('vless://') ||
+          trimmed.startsWith('trojan://') ||
+          trimmed.startsWith('hysteria://') ||
+          trimmed.startsWith('http://') ||
+          trimmed.startsWith('https://')
+        ) {
+          return this.replaceURLHost(line, host);
+        }
+        return line;
+      },
+      replaceURLHost(line, host) {
+        try {
+          const url = new URL(line.trim());
+          url.hostname = host;
+          return url.toString();
+        } catch (e) {
+          return line;
+        }
+      },
+      replaceVmessHost(line, host) {
+        try {
+          const payload = line.trim().slice('vmess://'.length);
+          const data = JSON.parse(atob(payload));
+          if (!data.add) {
+            return line;
+          }
+          data.add = host;
+          return 'vmess://' + btoa(JSON.stringify(data));
+        } catch (e) {
+          return line;
+        }
+      },
+      replaceSsHost(line, host) {
+        const match = line.trim().match(/^(ss:\/\/(?:[^@]+@)?)(\[[^\]]+\]|[^:/?#]+)(:\d+(?:[/?#].*)?)$/i);
+        if (!match) {
+          return line;
+        }
+        return match[1] + this.formatHostForAuthority(host) + match[3];
+      },
+      replaceWireGuardHost(line, host) {
+        return line.replace(/(Endpoint = )(\[[^\]]+\]|[^:]+)(:\d+)/, (_, prefix, _currentHost, port) => {
+          return prefix + this.formatHostForAuthority(host) + port;
+        });
+      },
+      formatHostForAuthority(host) {
+        if (!host) {
+          return host;
+        }
+        if (host.includes(':') && !host.startsWith('[') && !host.endsWith(']')) {
+          return `[${host}]`;
+        }
+        return host;
+      },
     },
+    watch: {
+      'infoModal.visible'(visible) {
+        if (visible) {
+          this.ensureServerStatus();
+        } else {
+          this.hostVariant = 'default';
+        }
+      }
+    }
   });
 </script>
 {{end}}

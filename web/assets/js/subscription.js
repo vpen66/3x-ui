@@ -94,6 +94,8 @@
       links: rawLinks,
       lang: '',
       viewportWidth: (typeof window !== 'undefined' ? window.innerWidth : 1024),
+      serverStatus: null,
+      hostVariant: 'default',
     },
     async mounted() {
       this.lang = LanguageManager.getLanguage();
@@ -102,15 +104,17 @@
       const sc = tpl ? tpl.getAttribute('data-subclash-url') : '';
       if (sj) this.app.subJsonUrl = sj;
       if (sc) this.app.subClashUrl = sc;
-      drawQR(this.app.subUrl);
+      await this.getStatus();
+      this.redrawQRCodes();
+      drawQR(this.variantSubUrl);
       try {
         const elJson = document.getElementById('qrcode-subjson');
-        if (elJson && this.app.subJsonUrl) {
-          new QRious({ element: elJson, value: this.app.subJsonUrl, size: 220 });
+        if (elJson && this.variantSubJsonUrl) {
+          new QRious({ element: elJson, value: this.variantSubJsonUrl, size: 220 });
         }
         const elClash = document.getElementById('qrcode-subclash');
-        if (elClash && this.app.subClashUrl) {
-          new QRious({ element: elClash, value: this.app.subClashUrl, size: 220 });
+        if (elClash && this.variantSubClashUrl) {
+          new QRious({ element: elClash, value: this.variantSubClashUrl, size: 220 });
         }
       } catch (e) { /* ignore */ }
       this._onResize = () => { this.viewportWidth = window.innerWidth; };
@@ -132,26 +136,46 @@
         const trafficOk = !this.app.totalByte || (this.app.uploadByte + this.app.downloadByte) <= this.app.totalByte;
         return expiryOk && trafficOk;
       },
+      availableVariants() {
+        const variants = [{ key: 'default', label: '默认' }];
+        const publicIP = this.serverStatus && this.serverStatus.publicIP ? this.serverStatus.publicIP : null;
+        if (publicIP && publicIP.ipv4 && publicIP.ipv4 !== 'N/A') {
+          variants.push({ key: 'ipv4', label: 'IPv4' });
+        }
+        if (publicIP && publicIP.ipv6 && publicIP.ipv6 !== 'N/A') {
+          variants.push({ key: 'ipv6', label: 'IPv6' });
+        }
+        return variants;
+      },
+      variantSubUrl() {
+        return this.getDisplayLink(this.app.subUrl);
+      },
+      variantSubJsonUrl() {
+        return this.getDisplayLink(this.app.subJsonUrl);
+      },
+      variantSubClashUrl() {
+        return this.getDisplayLink(this.app.subClashUrl);
+      },
       shadowrocketUrl() {
-        const rawUrl = this.app.subUrl + '?flag=shadowrocket';
+        const rawUrl = this.variantSubUrl + '?flag=shadowrocket';
         const base64Url = btoa(rawUrl);
         const remark = encodeURIComponent(this.app.sId || 'Subscription');
         return `shadowrocket://add/sub/${base64Url}?remark=${remark}`;
       },
       v2boxUrl() {
-        return `v2box://install-sub?url=${encodeURIComponent(this.app.subUrl)}&name=${encodeURIComponent(this.app.sId)}`;
+        return `v2box://install-sub?url=${encodeURIComponent(this.variantSubUrl)}&name=${encodeURIComponent(this.app.sId)}`;
       },
       streisandUrl() {
-        return `streisand://import/${encodeURIComponent(this.app.subUrl)}`;
+        return `streisand://import/${encodeURIComponent(this.variantSubUrl)}`;
       },
       v2raytunUrl() {
-        return this.app.subUrl;
+        return this.variantSubUrl;
       },
       npvtunUrl() {
-        return this.app.subUrl;
+        return this.variantSubUrl;
       },
       happUrl() {
-        return `happ://add/${this.app.subUrl}`;
+        return `happ://add/${this.variantSubUrl}`;
       }
     },
     methods: {
@@ -159,6 +183,59 @@
       copy,
       open,
       linkName,
+      async getStatus() {
+        try {
+          const msg = await HttpUtil.get('/panel/api/server/status');
+          if (msg.success) {
+            this.serverStatus = msg.obj;
+          }
+        } catch (e) {
+          console.error('Failed to get server status:', e);
+        }
+      },
+      setHostVariant(variant) {
+        this.hostVariant = variant;
+        this.redrawQRCodes();
+      },
+      getVariantHost() {
+        if (!this.serverStatus || !this.serverStatus.publicIP) {
+          return '';
+        }
+        if (this.hostVariant === 'ipv4') {
+          return this.serverStatus.publicIP.ipv4 && this.serverStatus.publicIP.ipv4 !== 'N/A' ? this.serverStatus.publicIP.ipv4 : '';
+        }
+        if (this.hostVariant === 'ipv6') {
+          return this.serverStatus.publicIP.ipv6 && this.serverStatus.publicIP.ipv6 !== 'N/A' ? this.serverStatus.publicIP.ipv6 : '';
+        }
+        return '';
+      },
+      getDisplayLink(link) {
+        const host = this.getVariantHost();
+        return host ? this.replaceURLHost(link, host) : link;
+      },
+      replaceURLHost(link, host) {
+        if (!link) return link;
+        try {
+          const url = new URL(link);
+          url.hostname = host;
+          return url.toString();
+        } catch (e) {
+          return link;
+        }
+      },
+      redrawQRCodes() {
+        drawQR(this.variantSubUrl);
+        try {
+          const elJson = document.getElementById('qrcode-subjson');
+          if (elJson && this.variantSubJsonUrl) {
+            new QRious({ element: elJson, value: this.variantSubJsonUrl, size: 220 });
+          }
+          const elClash = document.getElementById('qrcode-subclash');
+          if (elClash && this.variantSubClashUrl) {
+            new QRious({ element: elClash, value: this.variantSubClashUrl, size: 220 });
+          }
+        } catch (e) { /* ignore */ }
+      },
       i18nLabel(key) {
         return '{{ i18n "' + key + '" }}';
       },

@@ -1689,7 +1689,12 @@
       inboundLinks(dbInboundId) {
         dbInbound = this.dbInbounds.find(row => row.id === dbInboundId);
         newDbInbound = this.checkFallback(dbInbound);
-        txtModal.show('{{ i18n "pages.inbounds.export"}}', newDbInbound.genInboundLinks(this.remarkModel), newDbInbound.remark);
+        txtModal.show(
+          '{{ i18n "pages.inbounds.export"}}',
+          newDbInbound.genInboundLinks(this.remarkModel),
+          newDbInbound.remark,
+          { subscriptionLinks: true }
+        );
       },
       exportSubs(dbInboundId) {
         const dbInbound = this.dbInbounds.find(row => row.id === dbInboundId);
@@ -1705,7 +1710,8 @@
         txtModal.show(
           '{{ i18n "pages.inbounds.export"}} - {{ i18n "pages.settings.subSettings" }}',
           [...new Set(subLinks)].join('\n'),
-          dbInbound.remark + "-Subs");
+          dbInbound.remark + "-Subs",
+          { subscriptionLinks: true });
       },
       importInbound() {
         promptModal.open({
@@ -1733,14 +1739,20 @@
         txtModal.show(
           '{{ i18n "pages.inbounds.export"}} - {{ i18n "pages.settings.subSettings" }}',
           [...new Set(subLinks)].join('\r\n'),
-          'All-Inbounds-Subs');
+          'All-Inbounds-Subs',
+          { subscriptionLinks: true });
       },
       exportAllLinks() {
         let copyText = [];
         for (const dbInbound of this.dbInbounds) {
           copyText.push(dbInbound.genInboundLinks(this.remarkModel));
         }
-        txtModal.show('{{ i18n "pages.inbounds.export"}}', copyText.join('\r\n'), 'All-Inbounds');
+        txtModal.show(
+          '{{ i18n "pages.inbounds.export"}}',
+          copyText.join('\r\n'),
+          'All-Inbounds',
+          { subscriptionLinks: true }
+        );
       },
       copy(dbInboundId) {
         dbInbound = this.dbInbounds.find(row => row.id === dbInboundId);
